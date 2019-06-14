@@ -3,11 +3,10 @@ import torch
 
 import torch.nn as nn
 from tensorboardX import SummaryWriter
-import matplotlib.pyplot as plt
+import torchvision.utils as vutils
 
 from layers import Encoder, Decoder, Discriminator
 from losses import reconst_loss, kl_loss
-from utils import convert_to_pil
 
 
 class UNIT():
@@ -20,7 +19,7 @@ class UNIT():
         self.writer = SummaryWriter(output_dir, flush_secs=60)
 
         # Create UNIT network
-        self.device = torch.device('cuda')
+        self.device = params['device']
         self.E_a = Encoder(self.device).to(self.device)
         self.E_b = Encoder(self.device).to(self.device)
 
@@ -42,10 +41,8 @@ class UNIT():
         G_parameters = sum([list(model.parameters()) for model in self.generator], [])
         self.G_optimizer = torch.optim.Adam(G_parameters, lr=lr, betas=betas)
 
-    def train_model(self, train_iterator, n_epochs=10, print_every=500):
+    def train_model(self, train_iterator, fixed_examples, n_epochs=10, print_every=500):
         output_dir = self.params['output_dir']
-        fixed_X_a, fixed_X_b = next(iter(train_iterator))
-        fixed_X_a, fixed_X_b = fixed_X_a.to(self.device), fixed_X_b.to(self.device)
 
         global_step = 0
         for e in range(n_epochs):
@@ -55,25 +52,28 @@ class UNIT():
                 X_a, X_b = X_a.to(self.device), X_b.to(self.device)
 
                 forward_output = self.forward_pass(X_a, X_b)
-
+                # Update discriminators
                 D_losses = self.update_discriminators(X_a, X_b, forward_output)
 
                 # Update generators
                 G_losses = self.update_generators(X_a, X_b, forward_output)
 
-                if i % print_every == 0:
+                if global_step % print_every == 0:
+                    # Empty memory
+                    forward_output = []
                     print('Iteration {}'.format(i))
                     print('Generator\n----------')
                     for k, v in G_losses.items():
                         print('{}: {:.2f}'.format(k, v))
-                        self.writer .add_scalar('generator/' + k, v, global_step)
+                        self.writer.add_scalar('generator/' + k, v, global_step)
                     print('Discriminator\n-----------')
                     for k, v in D_losses.items():
                         print('{}: {:.2f}'.format(k, v))
                         self.writer.add_scalar('discriminator/' + k, v, global_step)
 
                     self.set_eval_mode()
-                    self.sample(fixed_X_a, fixed_X_b, output_dir, e, global_step)
+                    with torch.no_grad():
+                        self.sample(fixed_examples, output_dir, e, global_step)
                     self.set_train_mode()
 
                 global_step += 1
@@ -195,27 +195,49 @@ class UNIT():
 
         return losses
 
-    def sample(self, X_a, X_b, output_dir, epoch, global_step):
-        X_aa, X_bb, mu_a, mu_b, X_ab, X_ba, X_abba, X_baab, mu_abb, mu_baa = self.forward_pass(X_a, X_b)
+    def sample(self, fixed_examples, output_dir, epoch, global_step):
+        # Note that in .eval() mode, the encoder returns the mean without the noise
+        examples_a, examples_b = fixed_examples
+        n_examples = len(examples_a)
+        dict_samples = {}
+        for key in ['X_a', 'X_ab', 'X_abba', 'X_b', 'X_ba', 'X_baab']:
+            dict_samples[key] = []
 
-        plt.figure(figsize=(10, 5))
-        plt.subplot(231)
-        plt.imshow(convert_to_pil(X_a[0].cpu()))
-        plt.subplot(232)
-        plt.imshow(convert_to_pil(X_ab[0].detach().cpu()))
-        plt.subplot(233)
-        plt.imshow(convert_to_pil(X_abba[0].detach().cpu()))
+        examples_a, examples_b = examples_a.to(self.device), examples_b.to(self.device)
 
-        plt.subplot(234)
-        plt.imshow(convert_to_pil(X_b[0].cpu()))
-        plt.subplot(235)
-        plt.imshow(convert_to_pil(X_ba[0].detach().cpu()))
-        plt.subplot(236)
-        plt.imshow(convert_to_pil(X_baab[0].detach().cpu()))
-        filename = os.path.join(output_dir, 'epoch_{:02d}_iter_{:06d}.png'.format(epoch, global_step))
-        plt.savefig(filename)
-        plt.show()
-        plt.close()
+        for i in range(n_examples):
+            X_a, X_b = examples_a[i].unsqueeze(0), examples_b[i].unsqueeze(0)
+            X_aa, X_bb, mu_a, mu_b, X_ab, X_ba, X_abba, X_baab, mu_abb, mu_baa = self.forward_pass(X_a, X_b)
+
+            dict_samples['X_a'].append(X_a)
+            dict_samples['X_b'].append(X_b)
+            dict_samples['X_ab'].append(X_ab)
+            dict_samples['X_abba'].append(X_abba)
+            dict_samples['X_ba'].append(X_ba)
+            dict_samples['X_baab'].append(X_baab)
+
+        filename_suffix = 'epoch_{:02d}_iter_{:06d}.jpg'.format(epoch, global_step)
+        # Save A to B images
+        images_a_to_b = []
+        for i in range(n_examples):
+            images_a_to_b.append(dict_samples['X_a'][i])
+            images_a_to_b.append(dict_samples['X_ab'][i])
+            images_a_to_b.append(dict_samples['X_abba'][i])
+
+        images_a_to_b = torch.cat(images_a_to_b)
+
+        grid_a_to_b = vutils.make_grid(images_a_to_b, nrow=3, padding=0, normalize=True)
+        vutils.save_image(grid_a_to_b, os.path.join(output_dir, 'a_to_b_' + filename_suffix))
+
+        images_b_to_a = []
+        for i in range(n_examples):
+            images_b_to_a.append(dict_samples['X_b'][i])
+            images_b_to_a.append(dict_samples['X_ba'][i])
+            images_b_to_a.append(dict_samples['X_baab'][i])
+
+        images_b_to_a = torch.cat(images_b_to_a)
+        grid_b_to_a = vutils.make_grid(images_b_to_a, nrow=3, padding=0, normalize=True)
+        vutils.save_image(grid_b_to_a, os.path.join(output_dir, 'b_to_a' + filename_suffix))
 
     def set_train_mode(self):
         for model in (self.generator + self.discriminator):
@@ -248,6 +270,19 @@ class UNIT():
 
         self.G_optimizer.load_state_dict(checkpoint['G_optimizer'])
         self.D_optimizer.load_state_dict(checkpoint['D_optimizer'])
+
+
+class VAE(nn.Module):
+    def __init__(self, device):
+        super().__init__()
+        self.device = device
+        self.encoder = Encoder(device)
+        self.decoder = Decoder()
+
+    def forward(self, x):
+        z, mean = self.encoder(x)
+        x_hat = self.decoder(z)
+        return x_hat, mean, z
 
 
 

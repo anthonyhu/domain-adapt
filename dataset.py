@@ -1,6 +1,7 @@
 import os
 import json
 import random
+import torch
 
 import numpy as np
 import torchvision.transforms as transforms
@@ -73,21 +74,35 @@ class DomainDataset(Dataset):
         return x_day, x_night
 
 
-def get_data(root, batch_size=1, img_size=(512, 512)):
+def get_data(root, batch_size=1, img_size=(512, 512), subset=1):
     """ Create train/val iterator.
         Transformations are: CenterCrop, Resize, Convert to tensor in range [0, 1], Normalize to [-1, 1]
     """
-    X_day_train, X_night_train = load_day_and_night(root, 'train', subset=0.1)
-    X_day_val, X_night_val = load_day_and_night(root, 'val', subset=0.1)
+    X_day_train, X_night_train = load_day_and_night(root, 'train', subset=subset)
+    X_day_val, X_night_val = load_day_and_night(root, 'val', subset=subset)
 
     # Original image is (1280, 720)
-    data_transforms = transforms.Compose([transforms.CenterCrop(720),
-                                          transforms.Resize(img_size),
+    data_transforms = transforms.Compose([transforms.Resize(512),
+                                          transforms.RandomCrop(img_size),
                                           transforms.ToTensor(),
                                           transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+
+    # data_transforms = transforms.Compose([transforms.CenterCrop(720),
+    #                                       transforms.Resize(img_size),
+    #                                       transforms.ToTensor(),
+    #                                       transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
     train_dataset = DomainDataset(X_day_train, X_night_train, data_transforms)
     val_dataset = DomainDataset(X_day_val, X_night_val, data_transforms)
 
+    # Fixed example for monitoring
+    x_day_fixed = []
+    x_night_fixed = []
+    for i in range(4):
+        x_day_fixed.append(data_transforms(Image.open(X_day_train[i])))
+        x_night_fixed.append(data_transforms(Image.open(X_night_train[i])))
+
+    x_day_fixed, x_night_fixed = torch.stack(x_day_fixed), torch.stack(x_night_fixed)
+
     train_iterator = DataLoader(train_dataset, batch_size, shuffle=True)
     val_iterator = DataLoader(val_dataset, batch_size, shuffle=False)
-    return train_iterator, val_iterator
+    return train_iterator, val_iterator, (x_day_fixed, x_night_fixed)
