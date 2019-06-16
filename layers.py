@@ -192,8 +192,10 @@ class ResBlock(nn.Module):
 
 ##################################################################
 class ContentEncoder(nn.Module):
-    def __init__(self, n_downsample, n_res, input_dim, dim, norm, activ, pad_type):
-        super(ContentEncoder, self).__init__()
+    def __init__(self, n_downsample, n_res, input_dim, dim, norm, activ, pad_type, device):
+        super().__init__()
+
+        self.device = device
         self.model = []
         self.model += [Conv2dBlock(input_dim, dim, 7, 1, 3, norm=norm, activation=activ, pad_type=pad_type)]
         # downsampling blocks
@@ -269,7 +271,7 @@ class ResBlock_other(nn.Module):
 class Conv2dBlock(nn.Module):
     def __init__(self, input_dim ,output_dim, kernel_size, stride,
                  padding=0, norm='none', activation='relu', pad_type='zero'):
-        super(Conv2dBlock, self).__init__()
+        super().__init__()
         self.use_bias = True
         # initialize padding
         if pad_type == 'reflect':
@@ -328,7 +330,7 @@ class Conv2dBlock(nn.Module):
 class MsImageDis(nn.Module):
     # Multi-scale discriminator architecture
     def __init__(self, input_dim, params):
-        super(MsImageDis, self).__init__()
+        super().__init__()
         self.n_layer = params['n_layer']
         self.gan_type = params['gan_type']
         self.dim = params['dim']
@@ -358,7 +360,7 @@ class MsImageDis(nn.Module):
         for model in self.cnns:
             outputs.append(model(x))
             x = self.downsample(x)
-        return outputs
+        return outputs[0]  # TODO: remove [0] to keep multiscale
 
     def calc_dis_loss(self, input_fake, input_real):
         # calculate the loss to train D
@@ -391,3 +393,65 @@ class MsImageDis(nn.Module):
             else:
                 assert 0, "Unsupported GAN type: {}".format(self.gan_type)
         return loss
+
+
+class AdaptiveInstanceNorm2d(nn.Module):
+    def __init__(self, num_features, eps=1e-5, momentum=0.1):
+        super(AdaptiveInstanceNorm2d, self).__init__()
+        self.num_features = num_features
+        self.eps = eps
+        self.momentum = momentum
+        # weight and bias are dynamically assigned
+        self.weight = None
+        self.bias = None
+        # just dummy buffers, not used
+        self.register_buffer('running_mean', torch.zeros(num_features))
+        self.register_buffer('running_var', torch.ones(num_features))
+
+    def forward(self, x):
+        assert self.weight is not None and self.bias is not None, "Please assign weight and bias before calling AdaIN!"
+        b, c = x.size(0), x.size(1)
+        running_mean = self.running_mean.repeat(b)
+        running_var = self.running_var.repeat(b)
+
+        # Apply instance norm
+        x_reshaped = x.contiguous().view(1, b * c, *x.size()[2:])
+
+        out = F.batch_norm(
+            x_reshaped, running_mean, running_var, self.weight, self.bias,
+            True, self.momentum, self.eps)
+
+        return out.view(b, c, *x.size()[2:])
+
+    def __repr__(self):
+        return self.__class__.__name__ + '(' + str(self.num_features) + ')'
+
+
+class LayerNorm(nn.Module):
+    def __init__(self, num_features, eps=1e-5, affine=True):
+        super(LayerNorm, self).__init__()
+        self.num_features = num_features
+        self.affine = affine
+        self.eps = eps
+
+        if self.affine:
+            self.gamma = nn.Parameter(torch.Tensor(num_features).uniform_())
+            self.beta = nn.Parameter(torch.zeros(num_features))
+
+    def forward(self, x):
+        shape = [-1] + [1] * (x.dim() - 1)
+        # print(x.size())
+        if x.size(0) == 1:
+            # These two lines run much faster in pytorch 0.4 than the two lines listed below.
+            mean = x.view(-1).mean().view(*shape)
+            std = x.view(-1).std().view(*shape)
+        else:
+            mean = x.view(x.size(0), -1).mean(1).view(*shape)
+            std = x.view(x.size(0), -1).std(1).view(*shape)
+
+        x = (x - mean) / (std + self.eps)
+
+        if self.affine:
+            shape = [1, -1] + [1] * (x.dim() - 2)
+            x = x * self.gamma.view(*shape) + self.beta.view(*shape)
+        return x

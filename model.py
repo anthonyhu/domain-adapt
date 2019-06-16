@@ -5,12 +5,15 @@ import torch.nn as nn
 from tensorboardX import SummaryWriter
 import torchvision.utils as vutils
 
-from layers import Encoder, Decoder, Discriminator
+from layers import Encoder, Decoder, Discriminator, MsImageDis, ContentEncoder, Decoder_other
 from losses import reconst_loss, kl_loss
+from utils import weights_init
 
 
-class UNIT():
+# TODO: test influence of init, test own modules
+class UNIT(nn.Module):
     def __init__(self, params):
+        super().__init__()
         self.params = params
 
         # Tensorboard
@@ -20,14 +23,58 @@ class UNIT():
 
         # Create UNIT network
         self.device = params['device']
-        self.E_a = Encoder(self.device).to(self.device)
-        self.E_b = Encoder(self.device).to(self.device)
 
-        self.G_a = Decoder().to(self.device)
-        self.G_b = Decoder().to(self.device)
+        if params['use_own_modules']:
+            self.E_a = Encoder(self.device).to(self.device)
+            self.E_b = Encoder(self.device).to(self.device)
 
-        self.D_a = Discriminator().to(self.device)
-        self.D_b = Discriminator().to(self.device)
+            self.G_a = Decoder().to(self.device)
+            self.G_b = Decoder().to(self.device)
+
+            self.D_a = Discriminator().to(self.device)
+            self.D_b = Discriminator().to(self.device)
+        else:
+        #############################################
+            # Use original network
+            dim = 64
+            n_downsample = 2
+            n_res = 4
+            activ = 'relu'
+            pad_type = 'reflect'
+
+            # content encoder
+            self.E_a = ContentEncoder(n_downsample, n_res, 3, dim, 'in', activ, pad_type=pad_type, device=self.device)
+            self.E_b = ContentEncoder(n_downsample, n_res, 3, dim, 'in', activ, pad_type=pad_type, device=self.device)
+
+            self.G_a = Decoder_other(n_downsample, n_res, self.E_a.output_dim, 3, res_norm='in', activ=activ,
+                                     pad_type=pad_type)
+            self.G_b = Decoder_other(n_downsample, n_res, self.E_b.output_dim, 3, res_norm='in', activ=activ, pad_type=pad_type)
+
+            self.E_a = self.E_a.to(self.device)
+            self.E_b = self.E_b.to(self.device)
+            self.G_a = self.G_a.to(self.device)
+            self.G_b = self.G_b.to(self.device)
+
+
+            dis_params = {'dim': 64,                     # number of filters in the bottommost layer
+                          'norm': 'none',                  # normalization layer [none/bn/in/ln]
+                          'activ': 'lrelu',                # activation function [relu/lrelu/prelu/selu/tanh]
+                          'n_layer': 4,                  # number of layers in D
+                          'gan_type': 'lsgan',             # GAN loss [lsgan/nsgan]
+                          'num_scales': 1, # 3 originally             # number of scales
+                          'pad_type': 'reflect'}
+            self.D_a = MsImageDis(3, dis_params)
+            self.D_b = MsImageDis(3, dis_params)
+
+            self.D_a = self.D_a.to(self.device)
+            self.D_b = self.D_b.to(self.device)
+        ##############################################
+
+        if params['custom_init']:
+            print('Initialise generator with Kaiming normal and discri with Gaussian')
+            self.apply(weights_init('kaiming'))
+            self.D_a = self.D_a.apply(weights_init('gaussian'))
+            self.D_b = self.D_b.apply(weights_init('gaussian'))
 
         self.generator = [self.E_a, self.E_b, self.G_a, self.G_b]
         self.discriminator = [self.D_a, self.D_b]
@@ -41,22 +88,30 @@ class UNIT():
         G_parameters = sum([list(model.parameters()) for model in self.generator], [])
         self.G_optimizer = torch.optim.Adam(G_parameters, lr=lr, betas=betas)
 
+    def forward(self, X_a, X_b):
+        z_a, mu_a = self.E_a(X_a)
+        z_b, mu_b = self.E_b(X_b)
+
+        X_ab = self.G_b(z_a)
+        X_ba = self.G_a(z_b)
+
+        return X_ab, X_ba
+
     def train_model(self, train_iterator, fixed_examples, n_epochs=10, print_every=500):
         output_dir = self.params['output_dir']
 
         global_step = 0
         for e in range(n_epochs):
-            self.set_train_mode()
+            self.train()
             print('Epoch: {}\n------------------'.format(e + 1))
             for i, (X_a, X_b) in enumerate(train_iterator):
                 X_a, X_b = X_a.to(self.device), X_b.to(self.device)
 
-                forward_output = self.forward_pass(X_a, X_b)
                 # Update discriminators
-                D_losses = self.update_discriminators(X_a, X_b, forward_output)
+                D_losses = self.update_discriminators(X_a, X_b)
 
                 # Update generators
-                G_losses = self.update_generators(X_a, X_b, forward_output)
+                G_losses = self.update_generators(X_a, X_b)
 
                 if global_step % print_every == 0:
                     # Empty memory
@@ -70,11 +125,12 @@ class UNIT():
                     for k, v in D_losses.items():
                         print('{}: {:.2f}'.format(k, v))
                         self.writer.add_scalar('discriminator/' + k, v, global_step)
+                    print('\n\n')
 
-                    self.set_eval_mode()
+                    self.eval()
                     with torch.no_grad():
                         self.sample(fixed_examples, output_dir, e, global_step)
-                    self.set_train_mode()
+                    self.train()
 
                 global_step += 1
 
@@ -98,7 +154,7 @@ class UNIT():
 
         return X_aa, X_bb, mu_a, mu_b, X_ab, X_ba, X_abba, X_baab, mu_abb, mu_baa
 
-    def update_discriminators(self, X_a, X_b, forward_output):
+    def update_discriminators(self, X_a, X_b):
         """ Update step on a discriminator.
 
         Returns
@@ -110,7 +166,11 @@ class UNIT():
                 average value of the discriminator predicted for generated inputs
         """
         self.D_optimizer.zero_grad()
-        X_aa, X_bb, mu_a, mu_b, X_ab, X_ba, X_abba, X_baab, mu_abb, mu_baa = forward_output
+        # Translation
+        z_a, mu_a = self.E_a(X_a)
+        z_b, mu_b = self.E_b(X_b)
+        X_ab = self.G_b(z_a)
+        X_ba = self.G_a(z_b)
 
         # A model
         D_real_a = self.D_a(X_a)
@@ -147,11 +207,11 @@ class UNIT():
         return losses
 
     # Update generators
-    def update_generators(self, X_a, X_b, forward_output):
+    def update_generators(self, X_a, X_b):
         self.G_optimizer.zero_grad()
 
         r_coef, kl_coef, gan_coef = self.params['r_coef'], self.params['kl_coef'], self.params['gan_coef']
-        X_aa, X_bb, mu_a, mu_b, X_ab, X_ba, X_abba, X_baab, mu_abb, mu_baa = forward_output
+        X_aa, X_bb, mu_a, mu_b, X_ab, X_ba, X_abba, X_baab, mu_abb, mu_baa = self.forward_pass(X_a, X_b)
 
         reconst_aa = r_coef * reconst_loss(X_a, X_aa)
         reconst_bb = r_coef * reconst_loss(X_b, X_bb)
@@ -200,7 +260,7 @@ class UNIT():
         examples_a, examples_b = fixed_examples
         n_examples = len(examples_a)
         dict_samples = {}
-        for key in ['X_a', 'X_ab', 'X_abba', 'X_b', 'X_ba', 'X_baab']:
+        for key in ['X_a', 'X_aa', 'X_ab', 'X_abba', 'X_b', 'X_bb', 'X_ba', 'X_baab']:
             dict_samples[key] = []
 
         examples_a, examples_b = examples_a.to(self.device), examples_b.to(self.device)
@@ -210,9 +270,12 @@ class UNIT():
             X_aa, X_bb, mu_a, mu_b, X_ab, X_ba, X_abba, X_baab, mu_abb, mu_baa = self.forward_pass(X_a, X_b)
 
             dict_samples['X_a'].append(X_a)
-            dict_samples['X_b'].append(X_b)
+            dict_samples['X_aa'].append(X_aa)
             dict_samples['X_ab'].append(X_ab)
             dict_samples['X_abba'].append(X_abba)
+
+            dict_samples['X_b'].append(X_b)
+            dict_samples['X_bb'].append(X_bb)
             dict_samples['X_ba'].append(X_ba)
             dict_samples['X_baab'].append(X_baab)
 
@@ -221,31 +284,26 @@ class UNIT():
         images_a_to_b = []
         for i in range(n_examples):
             images_a_to_b.append(dict_samples['X_a'][i])
+            images_a_to_b.append(dict_samples['X_aa'][i])
             images_a_to_b.append(dict_samples['X_ab'][i])
             images_a_to_b.append(dict_samples['X_abba'][i])
 
         images_a_to_b = torch.cat(images_a_to_b)
 
-        grid_a_to_b = vutils.make_grid(images_a_to_b, nrow=3, padding=0, normalize=True)
+        grid_a_to_b = vutils.make_grid(images_a_to_b, nrow=4, padding=0, normalize=True)
         vutils.save_image(grid_a_to_b, os.path.join(output_dir, 'a_to_b_' + filename_suffix))
 
+        # Save B to A images
         images_b_to_a = []
         for i in range(n_examples):
             images_b_to_a.append(dict_samples['X_b'][i])
+            images_b_to_a.append(dict_samples['X_bb'][i])
             images_b_to_a.append(dict_samples['X_ba'][i])
             images_b_to_a.append(dict_samples['X_baab'][i])
 
         images_b_to_a = torch.cat(images_b_to_a)
-        grid_b_to_a = vutils.make_grid(images_b_to_a, nrow=3, padding=0, normalize=True)
-        vutils.save_image(grid_b_to_a, os.path.join(output_dir, 'b_to_a' + filename_suffix))
-
-    def set_train_mode(self):
-        for model in (self.generator + self.discriminator):
-            model.train()
-
-    def set_eval_mode(self):
-        for model in (self.generator + self.discriminator):
-            model.eval()
+        grid_b_to_a = vutils.make_grid(images_b_to_a, nrow=4, padding=0, normalize=True)
+        vutils.save_image(grid_b_to_a, os.path.join(output_dir, 'b_to_a_' + filename_suffix))
 
     def save(self):
         checkpoint_name = os.path.join(self.params['output_dir'], 'model.pt')
