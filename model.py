@@ -63,11 +63,13 @@ class UNIT(nn.Module):
                           'gan_type': 'lsgan',             # GAN loss [lsgan/nsgan]
                           'num_scales': 1, # 3 originally             # number of scales
                           'pad_type': 'reflect'}
-            self.D_a = MsImageDis(3, dis_params)
-            self.D_b = MsImageDis(3, dis_params)
-
-            self.D_a = self.D_a.to(self.device)
-            self.D_b = self.D_b.to(self.device)
+            # self.D_a = MsImageDis(3, dis_params)
+            # self.D_b = MsImageDis(3, dis_params)
+            #
+            # self.D_a = self.D_a.to(self.device)
+            # self.D_b = self.D_b.to(self.device)
+            self.D_a = Discriminator().to(self.device)
+            self.D_b = Discriminator().to(self.device)
         ##############################################
 
         if not params['default_init']:
