@@ -60,7 +60,7 @@ class Decoder(nn.Module):
                 self.model.append(nn.Upsample(scale_factor=2))
                 self.model.append(ConvBlock(in_channels, in_channels // 2, kernel_size=5, stride=1, norm=norm, activation=activation))
             else:
-                self.model.append(ConvBlock(in_channels, in_channels // 2, kernel_size=5, stride=2, norm=norm, activation=activation,
+                self.model.append(ConvBlock(in_channels, in_channels // 2, kernel_size=3, stride=2, norm=norm, activation=activation,
                                             transpose=True))
 
             in_channels = in_channels // 2
