@@ -84,13 +84,10 @@ def get_data(root, batch_size=1, img_size=(512, 512), subset=1):
     # Original image is (1280, 720)
     data_transforms = transforms.Compose([transforms.Resize(512),
                                           transforms.RandomCrop(img_size),
+                                          transforms.RandomHorizontalFlip(),
                                           transforms.ToTensor(),
                                           transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
 
-    # data_transforms = transforms.Compose([transforms.CenterCrop(720),
-    #                                       transforms.Resize(img_size),
-    #                                       transforms.ToTensor(),
-    #                                       transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
     train_dataset = DomainDataset(X_day_train, X_night_train, data_transforms)
     val_dataset = DomainDataset(X_day_val, X_night_val, data_transforms)
 

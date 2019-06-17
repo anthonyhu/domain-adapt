@@ -5,12 +5,11 @@ import torch.nn as nn
 from tensorboardX import SummaryWriter
 import torchvision.utils as vutils
 
-from layers import Encoder, Decoder, Discriminator, MsImageDis
+from layers import Encoder, Decoder, Discriminator
 from losses import reconst_loss, kl_loss
 from utils import weights_init
 
 
-# TODO: test influence of init, test own modules
 class UNIT(nn.Module):
     def __init__(self, params):
         super().__init__()
@@ -29,21 +28,6 @@ class UNIT(nn.Module):
 
         self.G_a = Decoder().to(self.device)
         self.G_b = Decoder().to(self.device)
-
-        ##############################################
-        # dis_params = {'dim': 64,  # number of filters in the bottommost layer
-        #               'norm': 'none',  # normalization layer [none/bn/in/ln]
-        #               'activ': 'lrelu',  # activation function [relu/lrelu/prelu/selu/tanh]
-        #               'n_layer': 4,  # number of layers in D
-        #               'gan_type': 'lsgan',  # GAN loss [lsgan/nsgan]
-        #               'num_scales': 3,  # 3 originally             # number of scales
-        #               'pad_type': 'reflect',
-        #               'device': self.device}
-        # self.D_a = MsImageDis(3, dis_params)
-        # self.D_b = MsImageDis(3, dis_params)
-        #
-        # self.D_a = self.D_a.to(self.device)
-        # self.D_b = self.D_b.to(self.device)
 
         self.D_a = Discriminator(self.device).to(self.device)
         self.D_b = Discriminator(self.device).to(self.device)
@@ -109,6 +93,9 @@ class UNIT(nn.Module):
                     with torch.no_grad():
                         self.sample(fixed_examples, output_dir, e, global_step)
                     self.train()
+
+                if global_step % 5000 == 0:
+                    self.save()
 
                 global_step += 1
 

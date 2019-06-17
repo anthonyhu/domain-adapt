@@ -154,6 +154,9 @@ class Discriminator(nn.Module):
             loss += (nn.MSELoss()(D_real, valid)
                      + nn.MSELoss()(D_fake, fake))
 
+        D_x /= len(D_real_list)
+        D_G_x /= len(D_fake_list)
+
         return loss, D_x, D_G_x
 
     def generator_loss(self, X_fake):
