@@ -8,7 +8,7 @@ import torch.nn.functional as F
 
 
 class Encoder(nn.Module):
-    def __init__(self, device, input_channels=3, initial_c=64, n_conv=3, n_res=4):
+    def __init__(self, device, input_channels=3, initial_c=64, n_conv=3, n_res=4, activation='relu'):
         super().__init__()
         self.device = device
         self.model = []
@@ -18,7 +18,7 @@ class Encoder(nn.Module):
         for i in range(n_conv):
             kernel_size = 7 if i == 0 else 3
             stride = 1 if i == 0 else 2
-            self.model.append(ConvBlock(in_channels, out_channels, kernel_size, stride))
+            self.model.append(ConvBlock(in_channels, out_channels, kernel_size, stride, activation=activation))
             in_channels = out_channels
             out_channels *= 2
 
@@ -26,7 +26,7 @@ class Encoder(nn.Module):
         #     last_block = True if (i == (n_res-1)) else False
         #     self.model.append(ResBlock(in_channels, last_block=last_block))
 
-        self.model += [ResBlocks(4, out_channels, 'in', 'relu', pad_type='reflect')]
+        self.model += [ResBlocks(4, out_channels, 'in', activation, pad_type='reflect')]
 
         self.model = nn.Sequential(*self.model)
 
@@ -44,7 +44,7 @@ class Encoder(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self, initial_c=256, output_channels=3, n_res=4, n_conv=3):
+    def __init__(self, initial_c=256, output_channels=3, n_res=4, n_conv=3, activation='relu'):
         super().__init__()
         self.model = []
 
@@ -55,10 +55,10 @@ class Decoder(nn.Module):
 
         for i in range(n_conv - 1):
             self.model.append(nn.Upsample(scale_factor=2))
-            self.model.append(ConvBlock(in_channels, in_channels // 2, kernel_size=5, stride=1))
+            self.model.append(ConvBlock(in_channels, in_channels // 2, kernel_size=5, stride=1, norm='ln', activation=activation))
             in_channels = in_channels // 2
 
-        self.model.append(ConvBlock(in_channels, output_channels, kernel_size=7, stride=1, activation='tanh'))
+        self.model.append(ConvBlock(in_channels, output_channels, kernel_size=7, stride=1, norm='none', activation='tanh'))
 
         self.model = nn.Sequential(*self.model)
 
@@ -125,7 +125,7 @@ class ConvBlock(nn.Module):
     """ Conv and optional (BN - LeakyReLU)
         No bias, slope of 0.2 in LeakyReLU
     """
-    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, norm='in', activation='lrelu', transpose=False):
+    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, norm='none', activation='none', transpose=False):
         super().__init__()
         padding = int((kernel_size - 1) / 2)
         self.conv = nn.Conv2d if not transpose else partial(nn.ConvTranspose2d, output_padding=padding)
@@ -134,6 +134,8 @@ class ConvBlock(nn.Module):
             self.norm = nn.InstanceNorm2d(out_channels)
         elif norm =='bn':
             self.norm = nn.BatchNorm2d(out_channels)
+        elif norm == 'ln':
+            self.norm = LayerNorm(out_channels)
         elif norm == 'none':
             self.norm = None
         else:
@@ -141,6 +143,8 @@ class ConvBlock(nn.Module):
 
         if activation == 'lrelu':
             self.activation = nn.LeakyReLU(0.2)
+        elif activation == 'relu':
+            self.activation = nn.ReLU()
         elif activation == 'tanh':
             self.activation = nn.Tanh()
         elif activation == 'none':
