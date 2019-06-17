@@ -375,7 +375,7 @@ class MsImageDis(nn.Module):
         for model in self.cnns:
             outputs.append(model(x))
             x = self.downsample(x)
-        return outputs[0]  # TODO: remove [0] to keep multiscale
+        return outputs  # TODO: remove [0] to keep multiscale
 
     def calc_dis_loss(self, input_fake, input_real):
         # calculate the loss to train D
