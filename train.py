@@ -14,7 +14,7 @@ parser.add_argument('--n_epochs', type=int, default=10)
 parser.add_argument('--batch_size', type=int, default=1)
 parser.add_argument('--save_every', type=int, default=500)
 parser.add_argument('--use_own_modules', action='store_true')
-parser.add_argument('--custom_init', action='store_true')
+parser.add_argument('--default_init', action='store_true')
 
 args = parser.parse_args()
 output_path = args.output_path
@@ -36,7 +36,7 @@ params = {'output_dir': output_path,
           'lr': 1e-4,
           'device': torch.device('cuda:' + gpu),
           'use_own_modules': args.use_own_modules,
-          'custom_init': args.custom_init
+          'default_init': args.default_init
           }
 
 unit_network = UNIT(params)

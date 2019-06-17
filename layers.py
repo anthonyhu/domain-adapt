@@ -208,12 +208,14 @@ class ContentEncoder(nn.Module):
         self.output_dim = dim
 
     def forward(self, x):
-        mean = self.model(x)
+        mu = self.model(x)
+
         if self.training:
-            z = mean + torch.randn_like(mean).to(self.device)
+            noise = Variable(torch.randn(mu.size())).to(self.device)
+            z = mu + noise
         else:
-            z = mean
-        return z, mean
+            z = mu
+        return z, mu
 
 class Decoder_other(nn.Module):
     def __init__(self, n_upsample, n_res, dim, output_dim, res_norm='adain', activ='relu', pad_type='zero'):
