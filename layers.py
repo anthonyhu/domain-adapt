@@ -95,18 +95,19 @@ class Decoder(nn.Module):
 
 
 class Discriminator(nn.Module):
-    def __init__(self, input_channels=3, initial_c=64, n_conv=4):
+    def __init__(self, input_channels=3, initial_c=64, n_conv=4, norm='none', activation='lrelu'):
         super().__init__()
         self.model = []
 
         in_channels = input_channels
         out_channels = initial_c
-        for i in range(n_conv - 1):
-            self.model.append(ConvBlock(in_channels, out_channels, 3, 2))
+        for i in range(n_conv):
+            self.model.append(ConvBlock(in_channels, out_channels, 3, 2, norm=norm, activation=activation))
             in_channels = out_channels
             out_channels = 2 * in_channels
 
-        self.model.append(ConvBlock(in_channels, 1, 5, norm='none', activation='none'))
+        self.model.append(ConvBlock(in_channels, 1, 1, norm='none', activation='none'))
+        self.model.append(nn.AvgPool2d(3, 2, padding=1))
 
         self.model = nn.Sequential(*self.model)
 
@@ -163,12 +164,14 @@ class ConvBlock(nn.Module):
 
 
 class ResBlock(nn.Module):
-    """ Conv - BN - LeakyReLU - Conv - BN - ADD and then LeakyReLU
+    """ Conv - BN - ReLU - Conv - BN - ADD and then ReLU
         Same number of channels in and out.
     """
 
-    def __init__(self, channels, norm='in', activation='lrelu', last_block=False):
+    def __init__(self, channels, norm='in', activation='lrelu', second_activation=False, last_block=False):
         super().__init__()
+        self.second_activation = second_activation
+
         if activation == 'lrelu':
             self.activation = nn.LeakyReLU(0.2)
         elif activation == 'relu':
@@ -192,75 +195,9 @@ class ResBlock(nn.Module):
         identity = x
         x = self.model(x)
         x += identity
-        if self.activation:
+        if self.activation and self.second_activation:
             x = self.activation(x)
         return x
-
-
-
-
-
-
-##################################################################
-class ContentEncoder(nn.Module):
-    def __init__(self, n_downsample, n_res, input_dim, dim, norm, activ, pad_type, device):
-        super().__init__()
-
-        self.device = device
-        self.model = []
-        self.model += [Conv2dBlock(input_dim, dim, 7, 1, 3, norm=norm, activation=activ, pad_type=pad_type)]
-        # downsampling blocks
-        for i in range(n_downsample):
-            self.model += [Conv2dBlock(dim, 2 * dim, 4, 2, 1, norm=norm, activation=activ, pad_type=pad_type)]
-            dim *= 2
-        # residual blocks
-        self.model += [ResBlocks(n_res, dim, norm=norm, activation=activ, pad_type=pad_type)]
-        self.model = nn.Sequential(*self.model)
-        self.output_dim = dim
-
-    def forward(self, x):
-        mu = self.model(x)
-
-        if self.training:
-            noise = Variable(torch.randn(mu.size())).to(self.device)
-            z = mu + noise
-        else:
-            z = mu
-        return z, mu
-
-class Decoder_other(nn.Module):
-    def __init__(self, n_upsample, n_res, dim, output_dim, res_norm='adain', activ='relu', pad_type='zero'):
-        super().__init__()
-
-        self.model = []
-        # AdaIN residual blocks
-        self.model += [ResBlocks(n_res, dim, res_norm, activ, pad_type=pad_type)]
-        # upsampling blocks
-        for i in range(n_upsample):
-            self.model += [nn.Upsample(scale_factor=2),
-                           Conv2dBlock(dim, dim // 2, 5, 1, 2, norm='ln', activation=activ, pad_type=pad_type)]
-            dim //= 2
-        # use reflection padding in the last conv layer
-        self.model += [Conv2dBlock(dim, output_dim, 7, 1, 3, norm='none', activation='tanh', pad_type=pad_type)]
-        self.model = nn.Sequential(*self.model)
-
-    def forward(self, x):
-        return self.model(x)
-
-##################################################################################
-# Sequential Models
-##################################################################################
-
-class ResBlocks(nn.Module):
-    def __init__(self, num_blocks, dim, norm='in', activation='relu', pad_type='zero'):
-        super(ResBlocks, self).__init__()
-        self.model = []
-        for i in range(num_blocks):
-            self.model += [ResBlock_other(dim, norm=norm, activation=activation, pad_type=pad_type)]
-        self.model = nn.Sequential(*self.model)
-
-    def forward(self, x):
-        return self.model(x)
 
 
 ##################################################################################
