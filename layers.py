@@ -366,7 +366,7 @@ class MsImageDis(nn.Module):
             x = self.downsample(x)
         return outputs  # TODO: remove [0] to keep multiscale
 
-    def calc_dis_loss(self, input_fake, input_real):
+    def discriminator_loss(self, input_real, input_fake):
         # calculate the loss to train D
         outs0 = self.forward(input_fake)
         outs1 = self.forward(input_real)
@@ -374,12 +374,7 @@ class MsImageDis(nn.Module):
 
         for it, (out0, out1) in enumerate(zip(outs0, outs1)):
             if self.gan_type == 'lsgan':
-                # loss += torch.mean((out0 - 0)**2) + torch.mean((out1 - 1)**2)
-                valid = torch.ones_like(out1).to(self.device)
-                fake = torch.zeros_like(out0).to(self.device)
-                loss_real_a = torch.nn.MSELoss()(out1, valid)
-                loss_fake_a = torch.nn.MSELoss()(out0, fake)
-                loss += loss_real_a + loss_fake_a
+                loss += torch.mean((out0 - 0)**2) + torch.mean((out1 - 1)**2)
 
             elif self.gan_type == 'nsgan':
                 all0 = Variable(torch.zeros_like(out0.data).cuda(), requires_grad=False)
@@ -388,17 +383,15 @@ class MsImageDis(nn.Module):
                                    F.binary_cross_entropy(F.sigmoid(out1), all1))
             else:
                 assert 0, "Unsupported GAN type: {}".format(self.gan_type)
-        return loss
+        return loss, torch.zeros(1), torch.zeros(1)
 
-    def calc_gen_loss(self, input_fake):
+    def generator_loss(self, input_fake):
         # calculate the loss to train G
         outs0 = self.forward(input_fake)
         loss = 0
         for it, (out0) in enumerate(outs0):
             if self.gan_type == 'lsgan':
-                valid = torch.ones_like(out0).to(self.device)
-                loss += torch.nn.MSELoss()(out0, valid)
-                # loss += torch.mean((out0 - 1)**2) # LSGAN
+                loss += torch.mean((out0 - 1)**2) # LSGAN
             elif self.gan_type == 'nsgan':
                 all1 = Variable(torch.ones_like(out0.data).cuda(), requires_grad=False)
                 loss += torch.mean(F.binary_cross_entropy(F.sigmoid(out0), all1))

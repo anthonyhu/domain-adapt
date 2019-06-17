@@ -5,7 +5,7 @@ import torch.nn as nn
 from tensorboardX import SummaryWriter
 import torchvision.utils as vutils
 
-from layers import Encoder, Decoder, Discriminator
+from layers import Encoder, Decoder, Discriminator, MsImageDis
 from losses import reconst_loss, kl_loss
 from utils import weights_init
 
@@ -29,8 +29,23 @@ class UNIT(nn.Module):
         self.G_a = Decoder().to(self.device)
         self.G_b = Decoder().to(self.device)
 
-        self.D_a = Discriminator(self.device).to(self.device)
-        self.D_b = Discriminator(self.device).to(self.device)
+        # self.D_a = Discriminator(self.device).to(self.device)
+        # self.D_b = Discriminator(self.device).to(self.device)
+
+        dis_params = {'dim': 64,
+                      'norm': 'none',
+                      'activ': 'lrelu',
+                      'n_layer': 4,
+                      'gan_type': 'lsgan',
+                      'num_scales': 3,
+                      'pad_type': 'reflect',
+                      'device': self.device}
+        self.D_a = MsImageDis(3, dis_params)
+        self.D_b = MsImageDis(3, dis_params)
+
+        #
+        self.D_a = self.D_a.to(self.device)  # self.D_a = self.D_a.to(self.device)
+        self.D_b = self.D_b.to(self.device)
 
         if not params['default_init']:
             print('Initialise generator with Kaiming normal and discri with Gaussian')
@@ -78,7 +93,7 @@ class UNIT(nn.Module):
                 if global_step % print_every == 0:
                     # Empty memory
                     forward_output = []
-                    print('Iteration {}'.format(i))
+                    print('Iteration {}'.format(global_step))
                     print('Generator\n----------')
                     for k, v in G_losses.items():
                         print('{}: {:.2f}'.format(k, v))
