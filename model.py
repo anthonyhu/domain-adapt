@@ -23,28 +23,16 @@ class UNIT(nn.Module):
         # Create UNIT network
         self.device = params['device']
 
-        self.E_a = Encoder(self.device).to(self.device)
-        self.E_b = Encoder(self.device).to(self.device)
+        self.E_a = Encoder(self.device, second_activation=params['second_activation']).to(self.device)
+        self.E_b = Encoder(self.device, second_activation=params['second_activation']).to(self.device)
 
-        self.G_a = Decoder().to(self.device)
-        self.G_b = Decoder().to(self.device)
+        self.G_a = Decoder(use_in=params['use_in'], second_activation=params['second_activation'], use_transposed=params['use_transposed']).to(self.device)
+        self.G_b = Decoder(use_in=params['use_in'], second_activation=params['second_activation'], use_transposed=params['use_transposed']).to(self.device)
 
-        # self.D_a = Discriminator(self.device).to(self.device)
-        # self.D_b = Discriminator(self.device).to(self.device)
+        self.D_a = Discriminator(self.device).to(self.device)
+        self.D_b = Discriminator(self.device).to(self.device)
 
-        dis_params = {'dim': 64,
-                      'norm': 'none',
-                      'activ': 'lrelu',
-                      'n_layer': 4,
-                      'gan_type': 'lsgan',
-                      'num_scales': 3,
-                      'pad_type': 'reflect',
-                      'device': self.device}
-        self.D_a = MsImageDis(3, dis_params)
-        self.D_b = MsImageDis(3, dis_params)
-
-        #
-        self.D_a = self.D_a.to(self.device)  # self.D_a = self.D_a.to(self.device)
+        self.D_a = self.D_a.to(self.device)
         self.D_b = self.D_b.to(self.device)
 
         if not params['default_init']:

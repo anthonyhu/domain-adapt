@@ -8,7 +8,7 @@ import torch.nn.functional as F
 
 
 class Encoder(nn.Module):
-    def __init__(self, device, input_channels=3, initial_c=64, n_conv=3, n_res=4, norm='in', activation='relu'):
+    def __init__(self, device, input_channels=3, initial_c=64, n_conv=3, n_res=4, norm='in', activation='relu', second_activation=False):
         super().__init__()
         self.device = device
         self.model = []
@@ -24,7 +24,7 @@ class Encoder(nn.Module):
 
         for i in range(n_res):
             last_block = True if (i == (n_res-1)) else False
-            self.model.append(ResBlock(in_channels, norm=norm, activation=activation, last_block=last_block))
+            self.model.append(ResBlock(in_channels, norm=norm, activation=activation, last_block=last_block, second_activation=second_activation))
 
         self.model = nn.Sequential(*self.model)
 
@@ -42,17 +42,27 @@ class Encoder(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self, initial_c=256, output_channels=3, n_res=4, n_conv=3, activation='relu'):
+    def __init__(self, initial_c=256, output_channels=3, n_res=4, n_conv=3, activation='relu', use_in=False, second_activation=False,
+                 use_transposed=False):
         super().__init__()
         self.model = []
 
         in_channels = initial_c
         for i in range(n_res):
-            self.model.append(ResBlock(in_channels, norm='in', activation=activation))
+            self.model.append(ResBlock(in_channels, norm='in', activation=activation, second_activation=second_activation))
 
         for i in range(n_conv - 1):
-            self.model.append(nn.Upsample(scale_factor=2))
-            self.model.append(ConvBlock(in_channels, in_channels // 2, kernel_size=5, stride=1, norm='ln', activation=activation))
+            if use_in:
+                norm = 'in'
+            else:
+                norm = 'ln'
+            if not use_transposed:
+                self.model.append(nn.Upsample(scale_factor=2))
+                self.model.append(ConvBlock(in_channels, in_channels // 2, kernel_size=5, stride=1, norm=norm, activation=activation))
+            else:
+                self.model.append(ConvBlock(in_channels, in_channels // 2, kernel_size=5, stride=2, norm=norm, activation=activation,
+                                            transpose=True))
+
             in_channels = in_channels // 2
 
         self.model.append(ConvBlock(in_channels, output_channels, kernel_size=7, stride=1, norm='none', activation='tanh', bias=True))

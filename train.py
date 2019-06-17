@@ -11,11 +11,15 @@ ROOT = '/data/cvfs/ah2029/datasets/bdd100k/'
 parser = argparse.ArgumentParser()
 parser.add_argument('--output_dir', type=str, required=True)
 parser.add_argument('--gpu', type=str, required=True)
-parser.add_argument('--default_init', action='store_true')
 parser.add_argument('--n_epochs', type=int, default=10)
 parser.add_argument('--batch_size', type=int, default=1)
 parser.add_argument('--print_every', type=int, default=100)
-parser.add_argument('--resume', action='store_true')
+parser.add_argument('--resume', default=False, action='store_true')
+
+parser.add_argument('--default_init', default=False, action='store_true')
+parser.add_argument('--use_in', default=False, action='store_true')
+parser.add_argument('--second_activation', default=False, action='store_true')
+parser.add_argument('--use_transposed', default=False, action='store_true')
 
 args = parser.parse_args()
 output_dir = args.output_dir
@@ -36,7 +40,10 @@ params = {'output_dir': output_dir,
           'betas': (0.5, 0.999),
           'lr': 1e-4,
           'device': torch.device('cuda:' + gpu),
-          'default_init': args.default_init
+          'default_init': args.default_init,
+          'use_in': args.use_in,
+          'second_activation': args.second_activation,
+          'use_transposed': args.use_transposed,
           }
 
 unit_network = UNIT(params)
