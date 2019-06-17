@@ -12,7 +12,7 @@ parser.add_argument('--output_path', type=str, required=True)
 parser.add_argument('--gpu', type=str, required=True)
 parser.add_argument('--n_epochs', type=int, default=10)
 parser.add_argument('--batch_size', type=int, default=1)
-parser.add_argument('--save_every', type=int, default=500)
+parser.add_argument('--save_every', type=int, default=100)
 parser.add_argument('--use_own_modules', action='store_true')
 parser.add_argument('--default_init', action='store_true')
 

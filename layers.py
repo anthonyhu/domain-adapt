@@ -95,7 +95,7 @@ class Decoder(nn.Module):
 
 
 class Discriminator(nn.Module):
-    def __init__(self, input_channels=3, initial_c=64, n_conv=6):
+    def __init__(self, input_channels=3, initial_c=64, n_conv=4):
         super().__init__()
         self.model = []
 
@@ -106,7 +106,7 @@ class Discriminator(nn.Module):
             in_channels = out_channels
             out_channels = 2 * in_channels
 
-        self.model.append(ConvBlock(in_channels, 1, 5, norm=None, activation=None))
+        self.model.append(ConvBlock(in_channels, 1, 5, norm='none', activation='none'))
 
         self.model = nn.Sequential(*self.model)
 
@@ -131,15 +131,19 @@ class ConvBlock(nn.Module):
             self.norm = nn.InstanceNorm2d(out_channels)
         elif norm =='bn':
             self.norm = nn.BatchNorm2d(out_channels)
-        else:
+        elif norm == 'none':
             self.norm = None
+        else:
+            raise ValueError('Not recognised norm {}'.format(norm))
 
         if activation == 'lrelu':
             self.activation = nn.LeakyReLU(0.2)
         elif activation == 'tanh':
             self.activation = nn.Tanh()
-        else:
+        elif activation == 'none':
             self.activation = None
+        else:
+            raise ValueError('Not recognised activation {}'.format(activation))
 
         self.conv = self.conv(in_channels, out_channels, kernel_size, stride, padding=padding, bias=False)
 
@@ -164,16 +168,18 @@ class ResBlock(nn.Module):
         super().__init__()
         if activation == 'lrelu':
             self.activation = nn.LeakyReLU(0.2)
-        else:
+        elif activation == 'none':
             self.activation = None
+        else:
+            raise ValueError('Not recognised activation {}'.format(activation))
 
         self.model = []
 
         self.model.append(ConvBlock(channels, channels, 3, 1, norm=norm, activation=activation))
         if last_block:
-            norm = None
+            norm = 'none'
             self.activation = None
-        self.model.append(ConvBlock(channels, channels, 3, 1, norm=norm, activation=None))
+        self.model.append(ConvBlock(channels, channels, 3, 1, norm=norm, activation='none'))
 
         self.model = nn.Sequential(*self.model)
 
