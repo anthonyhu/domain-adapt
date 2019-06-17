@@ -172,28 +172,30 @@ class UNIT(nn.Module):
         X_ab = self.G_b(z_a)
         X_ba = self.G_a(z_b)
 
-        if self.params['use_own_modules']:
-            # A model
-            D_real_a = self.D_a(X_a)
-            D_fake_a = self.D_a(X_ba.detach())
+        # A model
+        D_real_a = self.D_a(X_a)
+        D_fake_a = self.D_a(X_ba.detach())
 
-            valid = torch.ones_like(D_real_a).to(self.device)
-            fake = torch.zeros_like(D_fake_a).to(self.device)
+        valid = torch.ones_like(D_real_a).to(self.device)
+        fake = torch.zeros_like(D_fake_a).to(self.device)
 
-            loss_real_a = torch.nn.MSELoss()(D_real_a, valid)
-            loss_fake_a = torch.nn.MSELoss()(D_fake_a, fake)
-            loss_a = self.params['gan_coef'] * (loss_real_a + loss_fake_a)
+        loss_real_a = torch.nn.MSELoss()(D_real_a, valid)
+        loss_fake_a = torch.nn.MSELoss()(D_fake_a, fake)
+        loss_a = self.params['gan_coef'] * (loss_real_a + loss_fake_a)
 
-            # B model
-            D_real_b = self.D_b(X_b)
-            D_fake_b = self.D_b(X_ab.detach())
+        # B model
+        D_real_b = self.D_b(X_b)
+        D_fake_b = self.D_b(X_ab.detach())
 
-            loss_real_b = torch.nn.MSELoss()(D_real_b, valid)
-            loss_fake_b = torch.nn.MSELoss()(D_fake_b, fake)
-            loss_b = self.params['gan_coef'] * (loss_real_b + loss_fake_b)
-        else:
-            loss_a = self.params['gan_coef'] * self.D_a.calc_dis_loss(X_ba.detach(), X_a)
-            loss_b = self.params['gan_coef'] * self.D_b.calc_dis_loss(X_ab.detach(), X_b)
+        valid = torch.ones_like(D_real_b).to(self.device)
+        fake = torch.zeros_like(D_fake_b).to(self.device)
+
+        loss_real_b = torch.nn.MSELoss()(D_real_b, valid)
+        loss_fake_b = torch.nn.MSELoss()(D_fake_b, fake)
+        loss_b = self.params['gan_coef'] * (loss_real_b + loss_fake_b)
+        # else:
+        #     loss_a = self.params['gan_coef'] * self.D_a.calc_dis_loss(X_ba.detach(), X_a)
+        #     loss_b = self.params['gan_coef'] * self.D_b.calc_dis_loss(X_ab.detach(), X_b)
 
         loss = loss_a + loss_b
 
@@ -228,16 +230,16 @@ class UNIT(nn.Module):
         kl_abba = kl_coef * kl_loss(mu_abb)
         kl_baab = kl_coef * kl_loss(mu_baa)
 
-        if self.params['use_own_modules']:
-            D_gen_a = self.D_a(X_ba)
-            D_gen_b = self.D_b(X_ab)
-            valid = torch.ones_like(D_gen_a).to(self.device)
+        D_gen_a = self.D_a(X_ba)
+        D_gen_b = self.D_b(X_ab)
+        valid_a = torch.ones_like(D_gen_a).to(self.device)
+        valid_b = torch.ones_like(D_gen_b).to(self.device)
 
-            gan_a = gan_coef * torch.nn.MSELoss()(D_gen_a, valid)
-            gan_b = gan_coef * torch.nn.MSELoss()(D_gen_b, valid)
-        else:
-            gan_a = gan_coef * self.D_a.calc_gen_loss(X_ba)
-            gan_b = gan_coef * self.D_b.calc_gen_loss(X_ab)
+        gan_a = gan_coef * torch.nn.MSELoss()(D_gen_a, valid_a)
+        gan_b = gan_coef * torch.nn.MSELoss()(D_gen_b, valid_b)
+        # else:
+            # gan_a = gan_coef * self.D_a.calc_gen_loss(X_ba)
+            # gan_b = gan_coef * self.D_b.calc_gen_loss(X_ab)
 
         loss = (reconst_aa + kl_aa
                 + reconst_bb + kl_bb
