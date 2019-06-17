@@ -26,7 +26,7 @@ class Encoder(nn.Module):
         #     last_block = True if (i == (n_res-1)) else False
         #     self.model.append(ResBlock(in_channels, last_block=last_block))
 
-        self.model += [ResBlocks(4, out_channels, 'in', activation, pad_type='reflect')]
+        self.model += [ResBlocks(4, in_channels, 'in', activation, pad_type='reflect')]
 
         self.model = nn.Sequential(*self.model)
 
