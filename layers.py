@@ -288,6 +288,7 @@ class MsImageDis(nn.Module):
         self.activ = params['activ']
         self.num_scales = params['num_scales']
         self.pad_type = params['pad_type']
+        self.device = params['device']
         self.input_dim = input_dim
         self.downsample = nn.AvgPool2d(3, stride=2, padding=[1, 1], count_include_pad=False)
         self.cnns = nn.ModuleList()
@@ -320,7 +321,13 @@ class MsImageDis(nn.Module):
 
         for it, (out0, out1) in enumerate(zip(outs0, outs1)):
             if self.gan_type == 'lsgan':
-                loss += torch.mean((out0 - 0)**2) + torch.mean((out1 - 1)**2)
+                # loss += torch.mean((out0 - 0)**2) + torch.mean((out1 - 1)**2)
+                valid = torch.ones_like(out1).to(self.device)
+                fake = torch.zeros_like(out0).to(self.device)
+                loss_real_a = torch.nn.MSELoss()(out1, valid)
+                loss_fake_a = torch.nn.MSELoss()(out0, fake)
+                loss += loss_real_a + loss_fake_a
+
             elif self.gan_type == 'nsgan':
                 all0 = Variable(torch.zeros_like(out0.data).cuda(), requires_grad=False)
                 all1 = Variable(torch.ones_like(out1.data).cuda(), requires_grad=False)
@@ -336,7 +343,9 @@ class MsImageDis(nn.Module):
         loss = 0
         for it, (out0) in enumerate(outs0):
             if self.gan_type == 'lsgan':
-                loss += torch.mean((out0 - 1)**2) # LSGAN
+                valid = torch.ones_like(out0).to(self.device)
+                loss += torch.nn.MSELoss()(out0, valid)
+                # loss += torch.mean((out0 - 1)**2) # LSGAN
             elif self.gan_type == 'nsgan':
                 all1 = Variable(torch.ones_like(out0.data).cuda(), requires_grad=False)
                 loss += torch.mean(F.binary_cross_entropy(F.sigmoid(out0), all1))

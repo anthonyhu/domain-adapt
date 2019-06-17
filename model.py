@@ -59,7 +59,8 @@ class UNIT(nn.Module):
                       'n_layer': 4,  # number of layers in D
                       'gan_type': 'lsgan',  # GAN loss [lsgan/nsgan]
                       'num_scales': 3,  # 3 originally             # number of scales
-                      'pad_type': 'reflect'}
+                      'pad_type': 'reflect',
+                      'device': self.device}
         self.D_a = MsImageDis(3, dis_params)
         self.D_b = MsImageDis(3, dis_params)
 
