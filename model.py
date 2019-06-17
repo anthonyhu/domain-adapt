@@ -24,51 +24,29 @@ class UNIT(nn.Module):
         # Create UNIT network
         self.device = params['device']
 
-        if params['use_own_modules']:
-            self.E_a = Encoder(self.device).to(self.device)
-            self.E_b = Encoder(self.device).to(self.device)
+        self.E_a = Encoder(self.device).to(self.device)
+        self.E_b = Encoder(self.device).to(self.device)
 
-            self.G_a = Decoder().to(self.device)
-            self.G_b = Decoder().to(self.device)
-        else:
-        #############################################
-            # Use original network
-            dim = 64
-            n_downsample = 2
-            n_res = 4
-            activ = 'relu'
-            pad_type = 'reflect'
-
-            # content encoder
-            self.E_a = ContentEncoder(n_downsample, n_res, 3, dim, 'in', activ, pad_type=pad_type, device=self.device)
-            self.E_b = ContentEncoder(n_downsample, n_res, 3, dim, 'in', activ, pad_type=pad_type, device=self.device)
-
-            self.G_a = Decoder_other(n_downsample, n_res, self.E_a.output_dim, 3, res_norm='in', activ=activ,
-                                     pad_type=pad_type)
-            self.G_b = Decoder_other(n_downsample, n_res, self.E_b.output_dim, 3, res_norm='in', activ=activ, pad_type=pad_type)
-
-            self.E_a = self.E_a.to(self.device)
-            self.E_b = self.E_b.to(self.device)
-            self.G_a = self.G_a.to(self.device)
-            self.G_b = self.G_b.to(self.device)
+        self.G_a = Decoder().to(self.device)
+        self.G_b = Decoder().to(self.device)
 
         ##############################################
-        dis_params = {'dim': 64,  # number of filters in the bottommost layer
-                      'norm': 'none',  # normalization layer [none/bn/in/ln]
-                      'activ': 'lrelu',  # activation function [relu/lrelu/prelu/selu/tanh]
-                      'n_layer': 4,  # number of layers in D
-                      'gan_type': 'lsgan',  # GAN loss [lsgan/nsgan]
-                      'num_scales': 3,  # 3 originally             # number of scales
-                      'pad_type': 'reflect',
-                      'device': self.device}
-        self.D_a = MsImageDis(3, dis_params)
-        self.D_b = MsImageDis(3, dis_params)
+        # dis_params = {'dim': 64,  # number of filters in the bottommost layer
+        #               'norm': 'none',  # normalization layer [none/bn/in/ln]
+        #               'activ': 'lrelu',  # activation function [relu/lrelu/prelu/selu/tanh]
+        #               'n_layer': 4,  # number of layers in D
+        #               'gan_type': 'lsgan',  # GAN loss [lsgan/nsgan]
+        #               'num_scales': 3,  # 3 originally             # number of scales
+        #               'pad_type': 'reflect',
+        #               'device': self.device}
+        # self.D_a = MsImageDis(3, dis_params)
+        # self.D_b = MsImageDis(3, dis_params)
+        #
+        # self.D_a = self.D_a.to(self.device)
+        # self.D_b = self.D_b.to(self.device)
 
-        self.D_a = self.D_a.to(self.device)
-        self.D_b = self.D_b.to(self.device)
-
-        # self.D_a = Discriminator().to(self.device)
-        # self.D_b = Discriminator().to(self.device)
+        self.D_a = Discriminator(self.device).to(self.device)
+        self.D_b = Discriminator(self.device).to(self.device)
 
         if not params['default_init']:
             print('Initialise generator with Kaiming normal and discri with Gaussian')
@@ -172,31 +150,8 @@ class UNIT(nn.Module):
         X_ab = self.G_b(z_a)
         X_ba = self.G_a(z_b)
 
-        #################
-        # # A model
-        # D_real_a = self.D_a(X_a)
-        # D_fake_a = self.D_a(X_ba.detach())
-        #
-        # valid = torch.ones_like(D_real_a).to(self.device)
-        # fake = torch.zeros_like(D_fake_a).to(self.device)
-        #
-        # loss_real_a = torch.nn.MSELoss()(D_real_a, valid)
-        # loss_fake_a = torch.nn.MSELoss()(D_fake_a, fake)
-        # loss_a = self.params['gan_coef'] * (loss_real_a + loss_fake_a)
-        #
-        # # B model
-        # D_real_b = self.D_b(X_b)
-        # D_fake_b = self.D_b(X_ab.detach())
-        #
-        # valid = torch.ones_like(D_real_b).to(self.device)
-        # fake = torch.zeros_like(D_fake_b).to(self.device)
-        #
-        # loss_real_b = torch.nn.MSELoss()(D_real_b, valid)
-        # loss_fake_b = torch.nn.MSELoss()(D_fake_b, fake)
-        # loss_b = self.params['gan_coef'] * (loss_real_b + loss_fake_b)
-        #############
-        loss_a = self.params['gan_coef'] * self.D_a.calc_dis_loss(X_ba.detach(), X_a)
-        loss_b = self.params['gan_coef'] * self.D_b.calc_dis_loss(X_ab.detach(), X_b)
+        loss_a, D_x_a, D_G_x_a = self.params['gan_coef'] * self.D_a.discriminator_loss(X_a, X_ba.detach())
+        loss_b, D_x_b, D_G_x_b = self.params['gan_coef'] * self.D_b.discriminator_loss(X_b, X_ab.detach())
 
         loss = loss_a + loss_b
 
@@ -206,10 +161,10 @@ class UNIT(nn.Module):
         losses = {'total_loss': loss.item(),
                   'loss_a': loss_a.item(),
                   'loss_b': loss_b.item(),
-                  # 'D_x_a': D_real_a.mean().item(),
-                  # 'D_G_x_a': D_fake_a.mean().item(),
-                  # 'D_x_b': D_real_b.mean().item(),
-                  # 'D_G_x_b': D_fake_b.mean().item()
+                  'D_x_a': D_x_a.item(),
+                  'D_G_x_a': D_G_x_a.item(),
+                  'D_x_b': D_x_b.item(),
+                  'D_G_x_b': D_G_x_b.item()
                   }
 
         return losses
@@ -231,17 +186,8 @@ class UNIT(nn.Module):
         kl_abba = kl_coef * kl_loss(mu_abb)
         kl_baab = kl_coef * kl_loss(mu_baa)
 
-        ##############
-        # D_gen_a = self.D_a(X_ba)
-        # D_gen_b = self.D_b(X_ab)
-        # valid_a = torch.ones_like(D_gen_a).to(self.device)
-        # valid_b = torch.ones_like(D_gen_b).to(self.device)
-        #
-        # gan_a = gan_coef * torch.nn.MSELoss()(D_gen_a, valid_a)
-        # gan_b = gan_coef * torch.nn.MSELoss()(D_gen_b, valid_b)
-        ############
-        gan_a = gan_coef * self.D_a.calc_gen_loss(X_ba)
-        gan_b = gan_coef * self.D_b.calc_gen_loss(X_ab)
+        gan_a = gan_coef * self.D_a.generator_loss(X_ba)
+        gan_b = gan_coef * self.D_b.generator_loss(X_ab)
 
         loss = (reconst_aa + kl_aa
                 + reconst_bb + kl_bb
