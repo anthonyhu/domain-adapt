@@ -171,6 +171,8 @@ class ResBlock(nn.Module):
         super().__init__()
         if activation == 'lrelu':
             self.activation = nn.LeakyReLU(0.2)
+        elif activation == 'relu':
+            self.activation = nn.ReLU()
         elif activation == 'none':
             self.activation = None
         else:
