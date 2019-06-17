@@ -30,9 +30,6 @@ class UNIT(nn.Module):
 
             self.G_a = Decoder().to(self.device)
             self.G_b = Decoder().to(self.device)
-
-            self.D_a = Discriminator().to(self.device)
-            self.D_b = Discriminator().to(self.device)
         else:
         #############################################
             # Use original network
@@ -55,22 +52,22 @@ class UNIT(nn.Module):
             self.G_a = self.G_a.to(self.device)
             self.G_b = self.G_b.to(self.device)
 
-
-            dis_params = {'dim': 64,                     # number of filters in the bottommost layer
-                          'norm': 'none',                  # normalization layer [none/bn/in/ln]
-                          'activ': 'lrelu',                # activation function [relu/lrelu/prelu/selu/tanh]
-                          'n_layer': 4,                  # number of layers in D
-                          'gan_type': 'lsgan',             # GAN loss [lsgan/nsgan]
-                          'num_scales': 1, # 3 originally             # number of scales
-                          'pad_type': 'reflect'}
-            # self.D_a = MsImageDis(3, dis_params)
-            # self.D_b = MsImageDis(3, dis_params)
-            #
-            # self.D_a = self.D_a.to(self.device)
-            # self.D_b = self.D_b.to(self.device)
-            self.D_a = Discriminator().to(self.device)
-            self.D_b = Discriminator().to(self.device)
         ##############################################
+        dis_params = {'dim': 64,  # number of filters in the bottommost layer
+                      'norm': 'none',  # normalization layer [none/bn/in/ln]
+                      'activ': 'lrelu',  # activation function [relu/lrelu/prelu/selu/tanh]
+                      'n_layer': 4,  # number of layers in D
+                      'gan_type': 'lsgan',  # GAN loss [lsgan/nsgan]
+                      'num_scales': 1,  # 3 originally             # number of scales
+                      'pad_type': 'reflect'}
+        self.D_a = MsImageDis(3, dis_params)
+        self.D_b = MsImageDis(3, dis_params)
+
+        self.D_a = self.D_a.to(self.device)
+        self.D_b = self.D_b.to(self.device)
+
+        # self.D_a = Discriminator().to(self.device)
+        # self.D_b = Discriminator().to(self.device)
 
         if not params['default_init']:
             print('Initialise generator with Kaiming normal and discri with Gaussian')

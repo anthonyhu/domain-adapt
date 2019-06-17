@@ -22,9 +22,11 @@ class Encoder(nn.Module):
             in_channels = out_channels
             out_channels *= 2
 
-        for i in range(n_res):
-            last_block = True if (i == (n_res-1)) else False
-            self.model.append(ResBlock(in_channels, last_block=last_block))
+        # for i in range(n_res):
+        #     last_block = True if (i == (n_res-1)) else False
+        #     self.model.append(ResBlock(in_channels, last_block=last_block))
+
+        self.model += [ResBlocks(4, out_channels, 'in', 'relu', pad_type='reflect')]
 
         self.model = nn.Sequential(*self.model)
 
@@ -47,8 +49,9 @@ class Decoder(nn.Module):
         self.model = []
 
         in_channels = initial_c
-        for i in range(n_res):
-            self.model.append(ResBlock(in_channels))
+        # for i in range(n_res):
+        #     self.model.append(ResBlock(in_channels))
+        self.model += [ResBlocks(4, in_channels, 'in', 'relu', pad_type='reflect')]
 
         for i in range(n_conv - 1):
             self.model.append(nn.Upsample(scale_factor=2))
