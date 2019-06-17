@@ -8,7 +8,7 @@ import torch.nn.functional as F
 
 
 class Encoder(nn.Module):
-    def __init__(self, device, input_channels=3, initial_c=64, n_conv=3, n_res=4, activation='relu'):
+    def __init__(self, device, input_channels=3, initial_c=64, n_conv=3, n_res=4, norm='in', activation='relu'):
         super().__init__()
         self.device = device
         self.model = []
@@ -18,15 +18,13 @@ class Encoder(nn.Module):
         for i in range(n_conv):
             kernel_size = 7 if i == 0 else 3
             stride = 1 if i == 0 else 2
-            self.model.append(ConvBlock(in_channels, out_channels, kernel_size, stride, activation=activation))
+            self.model.append(ConvBlock(in_channels, out_channels, kernel_size, stride, norm=norm, activation=activation))
             in_channels = out_channels
             out_channels *= 2
 
-        # for i in range(n_res):
-        #     last_block = True if (i == (n_res-1)) else False
-        #     self.model.append(ResBlock(in_channels, last_block=last_block))
-
-        self.model += [ResBlocks(4, in_channels, 'in', activation, pad_type='reflect')]
+        for i in range(n_res):
+            last_block = True if (i == (n_res-1)) else False
+            self.model.append(ResBlock(in_channels, norm=norm, activation=activation, last_block=last_block))
 
         self.model = nn.Sequential(*self.model)
 
@@ -49,9 +47,8 @@ class Decoder(nn.Module):
         self.model = []
 
         in_channels = initial_c
-        # for i in range(n_res):
-        #     self.model.append(ResBlock(in_channels))
-        self.model += [ResBlocks(4, in_channels, 'in', 'relu', pad_type='reflect')]
+        for i in range(n_res):
+            self.model.append(ResBlock(in_channels, norm='in', activation=activation))
 
         for i in range(n_conv - 1):
             self.model.append(nn.Upsample(scale_factor=2))
@@ -122,8 +119,7 @@ class Discriminator(nn.Module):
 
 
 class ConvBlock(nn.Module):
-    """ Conv and optional (BN - LeakyReLU)
-        No bias, slope of 0.2 in LeakyReLU
+    """ Conv and optional (BN - ReLU)
     """
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, norm='none', activation='none', transpose=False):
         super().__init__()
