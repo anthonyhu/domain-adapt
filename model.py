@@ -5,7 +5,7 @@ import torch.nn as nn
 from tensorboardX import SummaryWriter
 import torchvision.utils as vutils
 
-from layers import Encoder, Decoder, Discriminator, MsImageDis, ContentEncoder, Decoder_other
+from layers import Encoder, Decoder, Discriminator, MsImageDis
 from losses import reconst_loss, kl_loss
 from utils import weights_init
 
