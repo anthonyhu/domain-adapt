@@ -76,7 +76,7 @@ class DomainDataset(Dataset):
 
 def get_data(root, batch_size=1, img_size=(512, 512), subset=1):
     """ Create train/val iterator.
-        Transformations are: CenterCrop, Resize, Convert to tensor in range [0, 1], Normalize to [-1, 1]
+        Transformations are: Resize, CenterCrop, Horizontal flip, Convert to tensor in range [0, 1], Normalize to [-1, 1]
     """
     X_day_train, X_night_train = load_day_and_night(root, 'train', subset=subset)
     X_day_val, X_night_val = load_day_and_night(root, 'val', subset=subset)

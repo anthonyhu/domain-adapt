@@ -5,7 +5,7 @@ import torch.nn as nn
 from tensorboardX import SummaryWriter
 import torchvision.utils as vutils
 
-from layers import Encoder, Decoder, Discriminator, MsImageDis
+from layers import Encoder, Decoder, Discriminator
 from losses import reconst_loss, kl_loss
 from utils import weights_init
 
@@ -18,16 +18,15 @@ class UNIT(nn.Module):
         # Tensorboard
         output_dir = params['output_dir']
         os.makedirs(output_dir, exist_ok=True)
-        self.writer = SummaryWriter(output_dir, flush_secs=60)
 
         # Create UNIT network
         self.device = params['device']
 
-        self.E_a = Encoder(self.device, second_activation=params['second_activation']).to(self.device)
-        self.E_b = Encoder(self.device, second_activation=params['second_activation']).to(self.device)
+        self.E_a = Encoder(self.device).to(self.device)
+        self.E_b = Encoder(self.device).to(self.device)
 
-        self.G_a = Decoder(use_in=params['use_in'], second_activation=params['second_activation'], use_transposed=params['use_transposed']).to(self.device)
-        self.G_b = Decoder(use_in=params['use_in'], second_activation=params['second_activation'], use_transposed=params['use_transposed']).to(self.device)
+        self.G_a = Decoder().to(self.device)
+        self.G_b = Decoder().to(self.device)
 
         self.D_a = Discriminator(self.device).to(self.device)
         self.D_b = Discriminator(self.device).to(self.device)
@@ -35,11 +34,10 @@ class UNIT(nn.Module):
         self.D_a = self.D_a.to(self.device)
         self.D_b = self.D_b.to(self.device)
 
-        if not params['default_init']:
-            print('Initialise generator with Kaiming normal and discri with Gaussian')
-            self.apply(weights_init('kaiming'))
-            self.D_a = self.D_a.apply(weights_init('gaussian'))
-            self.D_b = self.D_b.apply(weights_init('gaussian'))
+        print('Initialise generator with Kaiming normal and discri with Gaussian')
+        self.apply(weights_init('kaiming'))
+        self.D_a = self.D_a.apply(weights_init('gaussian'))
+        self.D_b = self.D_b.apply(weights_init('gaussian'))
 
         self.generator = [self.E_a, self.E_b, self.G_a, self.G_b]
         self.discriminator = [self.D_a, self.D_b]
@@ -64,6 +62,7 @@ class UNIT(nn.Module):
 
     def train_model(self, train_iterator, fixed_examples, n_epochs=10, print_every=500):
         output_dir = self.params['output_dir']
+        writer = SummaryWriter(output_dir, flush_secs=60)
 
         global_step = 0
         for e in range(n_epochs):
@@ -79,17 +78,15 @@ class UNIT(nn.Module):
                 G_losses = self.update_generators(X_a, X_b)
 
                 if global_step % print_every == 0:
-                    # Empty memory
-                    forward_output = []
                     print('Iteration {}'.format(global_step))
                     print('Generator\n----------')
                     for k, v in G_losses.items():
                         print('{}: {:.2f}'.format(k, v))
-                        self.writer.add_scalar('generator/' + k, v, global_step)
+                        writer.add_scalar('generator/' + k, v, global_step)
                     print('Discriminator\n-----------')
                     for k, v in D_losses.items():
                         print('{}: {:.2f}'.format(k, v))
-                        self.writer.add_scalar('discriminator/' + k, v, global_step)
+                        writer.add_scalar('discriminator/' + k, v, global_step)
                     print('\n\n')
 
                     self.eval()
@@ -267,7 +264,7 @@ class UNIT(nn.Module):
                    checkpoint_name)
 
     def load(self, checkpoint_name):
-        checkpoint = torch.load(checkpoint_name)
+        checkpoint = torch.load(checkpoint_name, map_location='cuda:' + str(self.device.index))
         self.E_a.load_state_dict(checkpoint['E_a'])
         self.E_b.load_state_dict(checkpoint['E_b'])
         self.G_a.load_state_dict(checkpoint['G_a'])
@@ -277,19 +274,4 @@ class UNIT(nn.Module):
 
         self.G_optimizer.load_state_dict(checkpoint['G_optimizer'])
         self.D_optimizer.load_state_dict(checkpoint['D_optimizer'])
-
-
-class VAE(nn.Module):
-    def __init__(self, device):
-        super().__init__()
-        self.device = device
-        self.encoder = Encoder(device)
-        self.decoder = Decoder()
-
-    def forward(self, x):
-        z, mean = self.encoder(x)
-        x_hat = self.decoder(z)
-        return x_hat, mean, z
-
-
 
