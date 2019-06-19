@@ -22,9 +22,9 @@ No norm or activation for last layer, but add bias.
 * ResBlock 3x3x256, InstNorm, ReLU
 * ResBlock 3x3x256, InstNorm, ReLU
 * Upsample factor 2
-* Conv 5x5x128, LayerNorm, ReLU
+* Conv 5x5x128, InstNorm, ReLU (but LayerNorm might be better)
 * Upsample factor 2
-* Conv 5x5x64, LayerNorm, ReLU
+* Conv 5x5x64, InstNorm, ReLU (but LayerNorm might be better)
 * Conv 7x7x3, Tanh
 
 Don't forget bias in the last layer.
